@@ -335,15 +335,15 @@ pub fn main()
     for y in 0..h {
         for x in 0..w {
             let raster_x = 100. * ((x as f32) / (w as f32) - 0.5);
-            let raster_x2 = 1.1 * raster_x;
-            let raster_y = 100. * ((y as f32) / (h as f32) - 0.5);
-            let raster_y2 = 1.1 * raster_y;
+            let raster_x2 = 1.3 * raster_x;
+            let raster_y = 100. * (((h - y) as f32) / (h as f32) - 0.5);
+            let raster_y2 = 1.3 * raster_y;
 
             let p0 = Vec3::new(raster_x, raster_y, 150.0 );
 	    let p1 = Vec3::new(raster_x2, raster_y2, 0.0);
             let direction = (p1.sub(&p0)).normalize();
 
-            let ray = Ray {origin: p0.add(&Vec3::new(50.0, 50.0, 0.0)), direction: direction};
+            let ray = Ray {origin: p0.add(&Vec3::new(50.0, 40.0, 0.0)), direction: direction};
 
             let color = radiance(&scene, &ray);
 
