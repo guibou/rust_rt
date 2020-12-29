@@ -1,6 +1,9 @@
+extern crate rand;
+
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
+use rand::Rng;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Vec3 {
@@ -237,6 +240,31 @@ impl Scene {
     }
 }
 
+pub fn compute_indirect_lighting(scene: &Scene, sphere: &Sphere, p: Vec3, depth: u32) -> Vec3 {
+    let mut rng = rand::thread_rng();
+    let normal_surface_norm = p.sub(&sphere.center).normalize();
+    // That's not how you generate an uniform direction...
+    let new_direction = Vec3::new(rng.gen(), rng.gen(), rng.gen()).mulf(2.0).sub(&Vec3::new(1.0, 1.0, 1.0)).normalize();
+
+    // rejection sampling, that's not how you are supposed to do that!
+    let dot = normal_surface_norm.dot(&new_direction);
+
+    // TODO; compute same side, not crappy dot
+    if dot > 0.0
+    {
+	compute_indirect_lighting(scene, sphere, p, depth)
+    }
+    else
+    {
+        let r = Ray {
+            origin: p.add(&new_direction.mulf(0.01)),
+            direction: new_direction,
+        };
+
+	sphere.color.mulf(dot.abs() * 2.0).mul(&radiance(scene, &r, depth + 1))
+    }
+}
+
 pub fn compute_direct_lighting(scene: &Scene, sphere: &Sphere, light: &Light, p: Vec3) -> Vec3 {
     let light_p = light.position;
     let sphere_to_light = light_p.sub(&p);
@@ -266,37 +294,45 @@ pub fn compute_direct_lighting(scene: &Scene, sphere: &Sphere, light: &Light, p:
     }
 }
 
-pub fn radiance(scene: &Scene, ray: &Ray) -> Vec3 {
-    let it = intersect_scene(&scene, ray);
+pub fn radiance(scene: &Scene, ray: &Ray, depth: u32) -> Vec3 {
+    if depth > 3
+    {
+	Vec3::new(0.0, 0.0, 0.0)
+    }
+    else
+    {
+        let it = intersect_scene(&scene, ray);
 
-    match it {
-        None => Vec3::new(0.0, 0.0, 0.0), // black if no it
-        Some(Intersect { t, sphere }) => {
-            let p = ray.get_p(t);
-            match sphere.material {
-                Material::Diffuse => {
-                    // There is only one light, that's easier
-                    compute_direct_lighting(&scene, &sphere, &scene.lights[0], p)
-                }
-                Material::Mirror => {
-                    let normal = p.sub(&sphere.center).normalize();
-                    let dir = reflect(ray.direction, normal);
-                    let r = Ray {
-                        origin: p.add(&dir.mulf(0.01)),
-                        direction: dir,
-                    };
+        match it {
+            None => Vec3::new(0.0, 0.0, 0.0), // black if no it
+            Some(Intersect { t, sphere }) => {
+                let p = ray.get_p(t);
+                match sphere.material {
+                    Material::Diffuse => {
+                        // There is only one light, that's easier
+                        compute_direct_lighting(&scene, &sphere, &scene.lights[0], p).add(
+        			&compute_indirect_lighting(&scene, &sphere, p, depth))
+                    }
+                    Material::Mirror => {
+                        let normal = p.sub(&sphere.center).normalize();
+                        let dir = reflect(ray.direction, normal);
+                        let r = Ray {
+                            origin: p.add(&dir.mulf(0.01)),
+                            direction: dir,
+                        };
 
-                    radiance(scene, &r)
-                }
-                Material::Glass => {
-                    let normal = p.sub(&sphere.center).normalize();
-                    let dir = reflect(ray.direction, normal);
-                    let r = Ray {
-                        origin: p.add(&dir.mulf(0.01)),
-                        direction: dir,
-                    };
+                        radiance(scene, &r, depth + 1)
+                    }
+                    Material::Glass => {
+                        let normal = p.sub(&sphere.center).normalize();
+                        let dir = reflect(ray.direction, normal);
+                        let r = Ray {
+                            origin: p.add(&dir.mulf(0.01)),
+                            direction: dir,
+                        };
 
-                    radiance(scene, &r)
+                        radiance(scene, &r, depth + 1)
+                    }
                 }
             }
         }
@@ -451,9 +487,14 @@ pub fn main() {
                 direction: direction,
             };
 
-            let color = radiance(&scene, &ray);
+	    let mut color_accum = Vec3::new(0.0, 0.0, 0.0);
 
-            im.set_pixel(x, y, color);
+	    for _sample in 0..10 {
+              let color = radiance(&scene, &ray, 0);
+	      color_accum = color_accum.add(&color);
+	    }
+
+            im.set_pixel(x, y, color_accum.mulf(1.0 / 11.0));
         }
     }
 
