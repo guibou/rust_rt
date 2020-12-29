@@ -62,6 +62,11 @@ impl Vec3
     }
 }
 
+pub fn reflect(i:Vec3, n:Vec3) -> Vec3
+{
+    n.mulf(-i.dot(&n) * 2.0).add(&i)
+}
+
 #[derive(Debug)]
 pub struct Ray
 {
@@ -255,11 +260,30 @@ pub fn radiance(scene: &Scene, ray: &Ray) -> Vec3
 
     match it
     {
-        None => Vec3::new(0.8, 0.2, 0.2), // pink if no it
+        None => Vec3::new(0.0, 0.0, 0.0), // black if no it
         Some(Intersect{t, sphere}) => {
 	    let p = ray.getP(t);
-	    // There is only one light, that's easier
-		computeDirectLighting(&scene, &sphere, &scene.lights[0], p)
+	    match sphere.material
+	    {
+		Material::Diffuse => {
+		    // There is only one light, that's easier
+		    computeDirectLighting(&scene, &sphere, &scene.lights[0], p)
+		}
+		Material::Mirror => {
+		    let normal = p.sub(&sphere.center).normalize();
+		    let dir = reflect(ray.direction, normal);
+		    let r = Ray{origin:p.add(&dir.mulf(0.01)), direction:dir};
+
+		    radiance(scene, &r)
+		}
+		Material::Glass => {
+		    let normal = p.sub(&sphere.center).normalize();
+		    let dir = reflect(ray.direction, normal);
+		    let r = Ray{origin:p.add(&dir.mulf(0.01)), direction:dir};
+
+		    radiance(scene, &r)
+		}
+	    }
 	}
     }
 }
