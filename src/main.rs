@@ -222,16 +222,31 @@ impl Scene {
 }
 
 
-pub fn computeDirectLighting(sphere : &Sphere, light: &Light, p:Vec3) -> Vec3
+pub fn computeDirectLighting(scene : &Scene, sphere : &Sphere, light: &Light, p:Vec3) -> Vec3
 {
     let lightP = light.position;
     let sphereToLight = lightP.sub(&p);
     let d2 = sphereToLight.length2();
-    let sphereToLightNorm = sphereToLight.mulf(1.0 / d2.sqrt());
+    let d = d2.sqrt();
+    let sphereToLightNorm = sphereToLight.mulf(1.0 / d);
     let normalSurfaceNorm = p.sub(&sphere.center).normalize();
     let absDot = normalSurfaceNorm.dot(&sphereToLightNorm).abs();
+    let r = Ray{origin:p.add(&sphereToLightNorm.mulf(0.01)), direction:sphereToLightNorm};
+    let it = intersect_scene(scene, &r);
 
-    sphere.color.mulf(absDot / (3.14159 * d2)).mul(&light.emission)
+    let occludded = match it {
+	None => false,
+	Some(Intersect{t, sphere}) => t < d
+    };
+
+    if occludded
+    {
+	Vec3::new(0.0, 0.0, 0.0)
+    }
+    else
+    {
+        sphere.color.mulf(absDot / (3.14159 * d2)).mul(&light.emission)
+    }
 }
 
 pub fn radiance(scene: &Scene, ray: &Ray) -> Vec3
@@ -244,7 +259,7 @@ pub fn radiance(scene: &Scene, ray: &Ray) -> Vec3
         Some(Intersect{t, sphere}) => {
 	    let p = ray.getP(t);
 	    // There is only one light, that's easier
-		computeDirectLighting(&sphere, &scene.lights[0], p)
+		computeDirectLighting(&scene, &sphere, &scene.lights[0], p)
 	}
     }
 }
@@ -310,17 +325,17 @@ pub fn main()
 {
     let scene = Scene::new(
 	(vec! [
-	    Sphere {radius: 1e5  ,center:(Vec3::new((1e5+1.0), 40.8, 81.6))  ,emission:Vec3::new(0.0, 0.0, 0.0),  color:(Vec3::new(0.75, 0.25, 0.25)), material: Material::Diffuse } // Left
-	    ,Sphere {radius: 1e5  ,center:(Vec3::new((-1e5+99.0), 40.8, 81.6)) ,emission:Vec3::new(0.0, 0.0, 0.0), color: (Vec3::new(0.25, 0.25, 0.75)),material:  Material::Diffuse } // Right
-	    ,Sphere {radius: 1e5  ,center:(Vec3::new(50.0, 40.8, 1e5))      ,emission:Vec3::new(0.0, 0.0, 0.0), color: (Vec3::new(0.75, 0.75, 0.75)),material:  Material::Diffuse } // Back
-	    ,Sphere {radius: 1e5  ,center:(Vec3::new(50.0, 40.8, (-1e5+170.0)))  ,emission:Vec3::new(0.0, 0.0, 0.0), color:Vec3::new(0.0, 0.0, 0.0),      material:        Material::Diffuse } // Front
-	    ,Sphere {radius: 1e5  ,center:(Vec3::new(50.0, 1e5, 81.6))     ,emission:Vec3::new(0.0, 0.0, 0.0), color: (Vec3::new(0.75, 0.75, 0.75)), material: Material::Diffuse } // Bottom
-	    ,Sphere {radius: 1e5  ,center:(Vec3::new(50.0, (-1e5+81.6), 81.6)) ,emission:Vec3::new(0.0, 0.0, 0.0), color: (Vec3::new(0.75, 0.75, 0.75)),material:  Material::Diffuse } // Top
+	    Sphere {radius: 1000.0  ,center:(Vec3::new((1000.0+1.0), 40.8, 81.6))  ,emission:Vec3::new(0.0, 0.0, 0.0),  color:(Vec3::new(0.75, 0.25, 0.25)), material: Material::Diffuse } // Left
+	    ,Sphere {radius: 1000.0  ,center:(Vec3::new((-1000.0+99.0), 40.8, 81.6)) ,emission:Vec3::new(0.0, 0.0, 0.0), color: (Vec3::new(0.25, 0.25, 0.75)),material:  Material::Diffuse } // Right
+	    ,Sphere {radius: 1000.0  ,center:(Vec3::new(50.0, 40.8, 1000.0))      ,emission:Vec3::new(0.0, 0.0, 0.0), color: (Vec3::new(0.75, 0.75, 0.75)),material:  Material::Diffuse } // Back
+	    ,Sphere {radius: 1000.0  ,center:(Vec3::new(50.0, 40.8, (-1000.0+170.0)))  ,emission:Vec3::new(0.0, 0.0, 0.0), color:Vec3::new(0.0, 0.0, 0.0),      material:        Material::Diffuse } // Front
+	    ,Sphere {radius: 1000.0  ,center:(Vec3::new(50.0, 1000.0, 81.6))     ,emission:Vec3::new(0.0, 0.0, 0.0), color: (Vec3::new(0.75, 0.75, 0.75)), material: Material::Diffuse } // Bottom
+	    ,Sphere {radius: 1000.0  ,center:(Vec3::new(50.0, (-1000.0+81.6), 81.6)) ,emission:Vec3::new(0.0, 0.0, 0.0), color: (Vec3::new(0.75, 0.75, 0.75)),material:  Material::Diffuse } // Top
 
 	    ,Sphere {radius: 16.5 ,center:(Vec3::new(27.0, 16.5, 47.0))        ,emission:Vec3::new(0.0, 0.0, 0.0), color: ((Vec3::new(0.99, 0.0, 0.99))), material:  Material::Mirror } // Mirror
 	    ,Sphere {radius: 16.5 ,center:(Vec3::new(73.0, 16.5, 78.0))        ,emission:Vec3::new(0.0, 0.0, 0.0), color: ((Vec3::new(0.0, 0.99, 0.99))), material:  Material::Glass } // Glass
 
-	    //,Sphere {radius: 1.5  ,center:(Vec3::new(50.0, (81.6-16.5), 81.6)),emission: ((Vec3::new(400.0, 400.0, 400.0)))   ,color:Vec3::new(0.0,0.0,0.0),material:  Material::Diffuse } // Light
+	    //,Sphere {radius: 1000.0  ,center:(Vec3::new(50.0, (81.6-16.5), 81.6)),emission: ((Vec3::new(400.0, 400.0, 400.0)))   ,color:Vec3::new(0.0,0.0,0.0),material:  Material::Diffuse } // Light
 	]).to_vec(),
 	(vec! [
 	    Light {emission: Vec3::new(5000.0, 5000.0, 5000.0), position: Vec3::new(50.0, 81.6-16.4, 81.6)}
