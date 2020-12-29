@@ -69,6 +69,13 @@ pub struct Ray
     direction: Vec3
 }
 
+impl Ray {
+    pub fn getP(&self, t: f32) -> Vec3
+    {
+	self.origin.add(&self.direction.mulf(t))
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Intersect<'a>
 {
@@ -215,6 +222,18 @@ impl Scene {
 }
 
 
+pub fn computeDirectLighting(sphere : &Sphere, light: &Light, p:Vec3) -> Vec3
+{
+    let lightP = light.position;
+    let sphereToLight = lightP.sub(&p);
+    let d2 = sphereToLight.length2();
+    let sphereToLightNorm = sphereToLight.mulf(1.0 / d2.sqrt());
+    let normalSurfaceNorm = p.sub(&sphere.center).normalize();
+    let absDot = normalSurfaceNorm.dot(&sphereToLightNorm).abs();
+
+    sphere.color.mulf(absDot / (3.14159 * d2)).mul(&light.emission)
+}
+
 pub fn radiance(scene: &Scene, ray: &Ray) -> Vec3
 {
     let it = intersect_scene(&scene, ray);
@@ -222,7 +241,11 @@ pub fn radiance(scene: &Scene, ray: &Ray) -> Vec3
     match it
     {
         None => Vec3::new(0.8, 0.2, 0.2), // pink if no it
-        Some(Intersect{t, sphere}) => sphere.color
+        Some(Intersect{t, sphere}) => {
+	    let p = ray.getP(t);
+	    // There is only one light, that's easier
+		computeDirectLighting(&sphere, &scene.lights[0], p)
+	}
     }
 }
 
@@ -237,7 +260,8 @@ pub fn tonemap(x: f32) -> i32
     }
     else
     {
-        (x * 255.0) as i32
+	// Gamma correction
+        (x.powf(1.0 / 2.2) * 255.0) as i32
     }
 }
 
@@ -296,9 +320,11 @@ pub fn main()
 	    ,Sphere {radius: 16.5 ,center:(Vec3::new(27.0, 16.5, 47.0))        ,emission:Vec3::new(0.0, 0.0, 0.0), color: ((Vec3::new(0.99, 0.0, 0.99))), material:  Material::Mirror } // Mirror
 	    ,Sphere {radius: 16.5 ,center:(Vec3::new(73.0, 16.5, 78.0))        ,emission:Vec3::new(0.0, 0.0, 0.0), color: ((Vec3::new(0.0, 0.99, 0.99))), material:  Material::Glass } // Glass
 
-	    ,Sphere {radius: 1.5  ,center:(Vec3::new(50.0, (81.6-16.5), 81.6)),emission: ((Vec3::new(400.0, 400.0, 400.0)))   ,color:Vec3::new(0.0,0.0,0.0),material:  Material::Diffuse } // Light
+	    //,Sphere {radius: 1.5  ,center:(Vec3::new(50.0, (81.6-16.5), 81.6)),emission: ((Vec3::new(400.0, 400.0, 400.0)))   ,color:Vec3::new(0.0,0.0,0.0),material:  Material::Diffuse } // Light
 	]).to_vec(),
-	(vec! []).to_vec(),
+	(vec! [
+	    Light {emission: Vec3::new(5000.0, 5000.0, 5000.0), position: Vec3::new(50.0, 81.6-16.4, 81.6)}
+	]).to_vec(),
     );
 
     let w = 768;

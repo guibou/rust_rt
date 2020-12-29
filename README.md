@@ -26,4 +26,4 @@ Should display something ugly such as:
 
 ![Ugly image](cornel.png)
 
-That's raytracing of sphere, with no lighting, a shitty camera model.
+That's raytracing of sphere, with lighting, but no shadow, and everything is crappy.
