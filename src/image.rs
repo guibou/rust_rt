@@ -1,7 +1,10 @@
+extern crate rayon;
+
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 
+use image::rayon::prelude::*;
 use vec3::Vec3;
 
 pub fn tonemap(x: f32) -> i32 {
@@ -25,14 +28,18 @@ pub struct Image {
 impl Image {
     pub fn new<F>(width: i32, height: i32, f: F) -> Image
     where
-        F: Fn(i32, i32) -> Vec3,
+        F: Fn(i32, i32) -> Vec3 + Sync,
     {
         Image {
             width: width,
             height: height,
-            pixels: (0..height)
-                .flat_map(|y| (0..width).map(move |x| (y, x)))
-                .map(|(y, x)| f(y, x))
+            pixels: (0..(height * width))
+                .into_par_iter()
+                .map(|idx| {
+                    let line = idx / height;
+                    let col = idx % height;
+                    f(line, col)
+                })
                 .collect(),
         }
     }
