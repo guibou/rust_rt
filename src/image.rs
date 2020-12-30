@@ -23,20 +23,18 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new(width: i32, height: i32, default: Vec3) -> Image {
-        let mut v = Vec::new();
-
-        v.resize((width * height) as usize, default);
-
+    pub fn new<F>(width: i32, height: i32, f: F) -> Image
+    where
+        F: Fn(i32, i32) -> Vec3,
+    {
         Image {
             width: width,
             height: height,
-            pixels: v,
+            pixels: (0..height)
+                .flat_map(|y| (0..width).map(move |x| (y, x)))
+                .map(|(y, x)| f(y, x))
+                .collect(),
         }
-    }
-
-    pub fn set_pixel(&mut self, x: i32, y: i32, v: Vec3) {
-        self.pixels[(x + y * self.width) as usize] = v
     }
 
     pub fn write(&self, filepath: &str) {

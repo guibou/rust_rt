@@ -1,11 +1,11 @@
 extern crate rand;
 
+mod image;
 mod sampling;
 mod vec3;
-mod image;
 
-use vec3::Vec3;
 use image::Image;
+use vec3::Vec3;
 
 #[derive(Debug, PartialEq)]
 pub enum Material {
@@ -13,7 +13,6 @@ pub enum Material {
     Mirror,
     Glass,
 }
-
 
 pub fn reflect(i: &Vec3, n: &Vec3) -> Vec3 {
     n.mulf(-i.dot(&n) * 2.0).add(&i)
@@ -200,21 +199,31 @@ impl Scene {
     }
 }
 
-pub fn compute_indirect_lighting(ray_dir: &Vec3, scene: &Scene, sphere: &Sphere, p: &Vec3, depth: u32) -> Vec3 {
+pub fn compute_indirect_lighting(
+    ray_dir: &Vec3,
+    scene: &Scene,
+    sphere: &Sphere,
+    p: &Vec3,
+    depth: u32,
+) -> Vec3 {
     let normal_surface_norm = sampling::flip_normal(ray_dir, &p.sub(&sphere.center).normalize());
 
-    let sampling::Sample{pdf: _pdf, value: cos_sampled_dir} = sampling::sample_cosinus_hemisphere(&sampling::thread_sample_2d());
+    let sampling::Sample {
+        pdf: _pdf,
+        value: cos_sampled_dir,
+    } = sampling::sample_cosinus_hemisphere(&sampling::thread_sample_2d());
     let (b1, b2) = sampling::branchless_onb(&normal_surface_norm);
-    let new_direction = b1.mulf(cos_sampled_dir.x).add(&b2.mulf(cos_sampled_dir.y)).add(&normal_surface_norm.mulf(cos_sampled_dir.z));
+    let new_direction = b1
+        .mulf(cos_sampled_dir.x)
+        .add(&b2.mulf(cos_sampled_dir.y))
+        .add(&normal_surface_norm.mulf(cos_sampled_dir.z));
 
     let r = Ray {
         origin: p.add(&new_direction.mulf(0.01)),
         direction: new_direction,
     };
 
-    sphere
-        .color
-        .mul(&radiance(scene, &r, depth + 1))
+    sphere.color.mul(&radiance(scene, &r, depth + 1))
 }
 
 pub fn compute_direct_lighting(scene: &Scene, sphere: &Sphere, light: &Light, p: &Vec3) -> Vec3 {
@@ -259,8 +268,9 @@ pub fn radiance(scene: &Scene, ray: &Ray, depth: u32) -> Vec3 {
                 match sphere.material {
                     Material::Diffuse => {
                         // There is only one light, that's easier
-                        compute_direct_lighting(&scene, &sphere, &scene.lights[0], &p)
-                            .add(&compute_indirect_lighting(&ray.direction, &scene, &sphere, &p, depth))
+                        compute_direct_lighting(&scene, &sphere, &scene.lights[0], &p).add(
+                            &compute_indirect_lighting(&ray.direction, &scene, &sphere, &p, depth),
+                        )
                     }
                     Material::Mirror => {
                         let normal = p.sub(&sphere.center).normalize();
@@ -287,7 +297,6 @@ pub fn radiance(scene: &Scene, ray: &Ray, depth: u32) -> Vec3 {
         }
     }
 }
-
 
 pub fn main() {
     let scene = Scene::new(
@@ -360,28 +369,26 @@ pub fn main() {
     let w = 768;
     let h = 768;
 
-    let mut im = Image::new(w, h, Vec3::new(0., 0., 0.));
+    let im = Image::new(w, h, |y: i32, x: i32| {
+        let raster_x = 100. * ((x as f32) / (w as f32) - 0.5);
+        let raster_x2 = 1.3 * raster_x;
+        let raster_y = 100. * (((h - y) as f32) / (h as f32) - 0.5);
+        let raster_y2 = 1.3 * raster_y;
 
-    for y in 0..h {
-        for x in 0..w {
-            let raster_x = 100. * ((x as f32) / (w as f32) - 0.5);
-            let raster_x2 = 1.3 * raster_x;
-            let raster_y = 100. * (((h - y) as f32) / (h as f32) - 0.5);
-            let raster_y2 = 1.3 * raster_y;
+        let p0 = Vec3::new(raster_x, raster_y, 150.0);
+        let p1 = Vec3::new(raster_x2, raster_y2, 0.0);
+        let direction = (p1.sub(&p0)).normalize();
 
-            let p0 = Vec3::new(raster_x, raster_y, 150.0);
-            let p1 = Vec3::new(raster_x2, raster_y2, 0.0);
-            let direction = (p1.sub(&p0)).normalize();
+        let ray = Ray {
+            origin: p0.add(&Vec3::new(50.0, 40.0, 0.0)),
+            direction: direction,
+        };
 
-            let ray = Ray {
-                origin: p0.add(&Vec3::new(50.0, 40.0, 0.0)),
-                direction: direction,
-            };
-
-	    let color = (0..10).fold(Vec3::new(0.0, 0.0, 0.0), |sum, _x| { sum.add(&radiance(&scene, &ray, 0)) });
-            im.set_pixel(x, y, color.mulf(1.0 / 11.0));
-        }
-    }
+        let color = (0..10).fold(Vec3::new(0.0, 0.0, 0.0), |sum, _x| {
+            sum.add(&radiance(&scene, &ray, 0))
+        });
+        color.mulf(1.0 / 10.0)
+    });
 
     im.write("output.ppm");
 }
