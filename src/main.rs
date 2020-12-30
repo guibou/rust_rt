@@ -1,6 +1,5 @@
 extern crate rand;
 
-use rand::Rng;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
@@ -203,32 +202,21 @@ impl Scene {
     }
 }
 
-pub fn compute_indirect_lighting(scene: &Scene, sphere: &Sphere, p: &Vec3, depth: u32) -> Vec3 {
-    let mut rng = rand::thread_rng();
-    let normal_surface_norm = p.sub(&sphere.center).normalize();
-    // That's not how you generate an uniform direction...
-    let new_direction = Vec3::new(rng.gen(), rng.gen(), rng.gen())
-        .mulf(2.0)
-        .sub(&Vec3::new(1.0, 1.0, 1.0))
-        .normalize();
+pub fn compute_indirect_lighting(ray_dir: &Vec3, scene: &Scene, sphere: &Sphere, p: &Vec3, depth: u32) -> Vec3 {
+    let normal_surface_norm = sampling::flip_normal(ray_dir, &p.sub(&sphere.center).normalize());
 
-    // rejection sampling, that's not how you are supposed to do that!
-    let dot = normal_surface_norm.dot(&new_direction);
+    let sampling::Sample{pdf: _pdf, value: cos_sampled_dir} = sampling::sample_cosinus_hemisphere(&sampling::thread_sample_2d());
+    let (b1, b2) = sampling::branchless_onb(&normal_surface_norm);
+    let new_direction = b1.mulf(cos_sampled_dir.x).add(&b2.mulf(cos_sampled_dir.y)).add(&normal_surface_norm.mulf(cos_sampled_dir.z));
 
-    // TODO; compute same side, not crappy dot
-    if dot > 0.0 {
-        compute_indirect_lighting(scene, sphere, p, depth)
-    } else {
-        let r = Ray {
-            origin: p.add(&new_direction.mulf(0.01)),
-            direction: new_direction,
-        };
+    let r = Ray {
+        origin: p.add(&new_direction.mulf(0.01)),
+        direction: new_direction,
+    };
 
-        sphere
-            .color
-            .mulf(dot.abs() * 2.0)
-            .mul(&radiance(scene, &r, depth + 1))
-    }
+    sphere
+        .color
+        .mul(&radiance(scene, &r, depth + 1))
 }
 
 pub fn compute_direct_lighting(scene: &Scene, sphere: &Sphere, light: &Light, p: &Vec3) -> Vec3 {
@@ -274,7 +262,7 @@ pub fn radiance(scene: &Scene, ray: &Ray, depth: u32) -> Vec3 {
                     Material::Diffuse => {
                         // There is only one light, that's easier
                         compute_direct_lighting(&scene, &sphere, &scene.lights[0], &p)
-                            .add(&compute_indirect_lighting(&scene, &sphere, &p, depth))
+                            .add(&compute_indirect_lighting(&ray.direction, &scene, &sphere, &p, depth))
                     }
                     Material::Mirror => {
                         let normal = p.sub(&sphere.center).normalize();
@@ -448,14 +436,8 @@ pub fn main() {
                 direction: direction,
             };
 
-            let mut color_accum = Vec3::new(0.0, 0.0, 0.0);
-
-            for _sample in 0..10 {
-                let color = radiance(&scene, &ray, 0);
-                color_accum = color_accum.add(&color);
-            }
-
-            im.set_pixel(x, y, color_accum.mulf(1.0 / 11.0));
+	    let color = (0..10).fold(Vec3::new(0.0, 0.0, 0.0), |sum, _x| { sum.add(&radiance(&scene, &ray, 0)) });
+            im.set_pixel(x, y, color.mulf(1.0 / 11.0));
         }
     }
 
